@@ -286,7 +286,9 @@ bool GalleryUtil::LoadDirectory(ThumbList& itemList, const QString& dir,
     {
         fi = &(*it);
         ++it;
-        if (fi->fileName() == "." || fi->fileName() == "..")
+        if (fi->fileName() == "." || fi->fileName() == ".."
+           || fi->fileName() == "IPod Photo Cache"
+           || fi->fileName() == "Originals")
             continue;
 
         // remove these already-resized pictures.
