@@ -205,7 +205,7 @@ void MythRAOPDevice::newConnection(QTcpSocket *client)
     QMutexLocker locker(m_lock);
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("New connection from %1:%2")
         .arg(client->peerAddress().toString()).arg(client->peerPort()));
-
+    gCoreContext->SendSystemEvent(QString("RAOP_NEW_CONNECTION"));
     MythRAOPConnection *obj =
             new MythRAOPConnection(this, client, m_hardwareId, 6000);
 
@@ -229,7 +229,7 @@ void MythRAOPDevice::deleteClient(void)
     LOG(VB_GENERAL, LOG_DEBUG, LOC + "Entering DeleteClient.");
     QMutexLocker locker(m_lock);
     QList<MythRAOPConnection *>::iterator it = m_clients.begin();
-
+    gCoreContext->SendSystemEvent(QString("RAOP_DELETE_CONNECTION"));
     while (it != m_clients.end())
     {
         if ((*it)->GetSocket()->state() == QTcpSocket::UnconnectedState)
