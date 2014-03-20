@@ -132,8 +132,23 @@ LoggerBase::~LoggerBase()
 FileLogger::FileLogger(const char *filename) :
         LoggerBase(filename), m_opened(false), m_fd(-1), m_zmqSock(NULL)
 {
+    QFile *symlink = NULL;
+    if (strstr( filename, "mythbackend" ) != NULL)
+        symlink = new QFile("/var/log/mythtv/mythbackend.log");
+    if (symlink == NULL && (strstr( filename, "mythfrontend" ) != NULL))
+        symlink = new QFile("/var/log/mythtv/mythfrontend.log");
+    if (symlink != NULL) {
+        LOG(VB_GENERAL, LOG_INFO, "Symlink logging to " + symlink->fileName());
+        if (symlink->exists())
+            symlink->remove();
+    }
     m_fd = open(filename, O_WRONLY|O_CREAT|O_APPEND, 0664);
     m_opened = (m_fd != -1);
+    if(symlink != NULL) {
+       QFile logFile(filename);
+    if(!logFile.link(symlink->fileName()))
+       LOG(VB_GENERAL, LOG_INFO, "Symlink log create filed for " + symlink->fileName());
+
     LOG(VB_GENERAL, LOG_INFO, QString("Added logging to %1")
              .arg(filename));
 }
@@ -190,9 +205,23 @@ FileLogger *FileLogger::create(QString filename, QMutex *mutex)
 void FileLogger::reopen(void)
 {
     close(m_fd);
-
+    QFile *symlink = NULL;
+    if (strstr( filename, "mythbackend" ) != NULL)
+        symlink = new QFile("/var/log/mythtv/mythbackend.log");
+    if (symlink == NULL && (strstr( filename, "mythfrontend" ) != NULL))
+        symlink = new QFile("/var/log/mythtv/mythfrontend.log");
+    if (symlink != NULL) {
+        LOG(VB_GENERAL, LOG_INFO, "Symlink logging to " + symlink->fileName());
+        if (symlink->exists())
+            symlink->remove();
+    }
     m_fd = open(m_handle, O_WRONLY|O_CREAT|O_APPEND, 0664);
     m_opened = (m_fd != -1);
+    if(symlink != NULL) {
+       QFile logFile(filename);
+    if(!logFile.link(symlink->fileName()))
+       LOG(VB_GENERAL, LOG_INFO, "Symlink log create filed for " + symlink->fileName());
+
     LOG(VB_GENERAL, LOG_INFO, QString("Rolled logging on %1") .arg(m_handle));
 }
 
