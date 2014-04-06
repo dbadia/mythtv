@@ -219,6 +219,7 @@ void MythRAOPDevice::newConnection(QTcpSocket *client)
     n.SetVisibility(n.GetVisibility() & ~MythNotification::kPlayback);
     GetNotificationCenter()->Queue(n);
 
+    gCoreContext->SendSystemEvent(QString("RAOP_NEW_CONNECTION"));
     MythRAOPConnection *obj =
             new MythRAOPConnection(this, client, m_hardwareId, 6000);
 
@@ -242,6 +243,7 @@ void MythRAOPDevice::deleteClient(void)
     LOG(VB_GENERAL, LOG_DEBUG, LOC + "Entering DeleteClient.");
     QMutexLocker locker(m_lock);
     QList<MythRAOPConnection *>::iterator it = m_clients.begin();
+    gCoreContext->SendSystemEvent(QString("RAOP_DELETE_CONNECTION"));
 
     MythNotification n(tr("Client disconnected"), tr("AirTunes"));
     // Don't show it during playback
