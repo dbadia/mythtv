@@ -18,3 +18,4 @@ object_script.*
 *.pc
 patches
 *.core
+mythtv/bindings/perl/MYMETA.json
