@@ -293,6 +293,8 @@ bool GalleryUtil::LoadDirectory(ThumbList& itemList, const QString& dir,
         if (isGallery && (
                 (fi->fileName().indexOf(".thumb.") > 0) ||
                 (fi->fileName().indexOf(".sized.") > 0) ||
+                (fi->fileName() == "IPod Photo Cache") ||
+                (fi->fileName() == "Originals") ||
                 (fi->fileName().indexOf(".highlight.") > 0)))
             continue;
 
