@@ -166,7 +166,10 @@ bool MythRAOPDevice::RegisterForBonjour(void)
     name.append("@");
     name.append(m_name);
     name.append(" on ");
-    name.append(gCoreContext->GetHostName());
+    QString raopName = gCoreContext->GetSetting("RAOPCustomName",
+    gCoreContext->GetHostName());
+    LOG(VB_GENERAL, LOG_ERR, LOC + QString("raopName=%1").arg(raopName));
+    name.append(raopName);
     QByteArray type = "_raop._tcp";
     QByteArray txt;
     txt.append(6); txt.append("tp=UDP");
