@@ -13029,6 +13029,22 @@ bool TV::IsBookmarkAllowed(const PlayerContext *ctx) const
 {
     ctx->LockPlayingInfo(__FILE__, __LINE__);
 
+    // Look for badia home videos and don't allow bookmarking
+    LOG(VB_PLAYBACK, LOG_ERR, QString("BADIA isVid=%1 basename=%2 startswith=%3")
+            .arg(ctx->playingInfo->IsVideoFile())
+            .arg(ctx->playingInfo->GetBasename())
+            .arg(ctx->playingInfo->GetBasename().startsWith("Kids_")));
+    QString basename = ctx->playingInfo->GetBasename();
+    bool isHomeVid = ctx->playingInfo && ctx->playingInfo->IsVideoFile()
+             && ( basename.startsWith("Kids") ||
+             basename.startsWith("Emma") ||
+             basename.startsWith("James") );
+    if(isHomeVid) {
+         LOG(VB_PLAYBACK, LOG_ERR, "BADIA Home vid found");
+         return false;
+     }
+
+    
     // Allow bookmark of "Record current LiveTV program"
     if (StateIsLiveTV(GetState(ctx)) && ctx->playingInfo &&
         (ctx->playingInfo->QueryAutoExpire() == kLiveTVAutoExpire))

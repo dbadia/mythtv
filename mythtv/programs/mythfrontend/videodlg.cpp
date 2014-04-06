@@ -255,7 +255,7 @@ namespace
     void PlayVideo(const QString &filename,
             const VideoMetadataListManager &video_list, bool useAltPlayer = false)
     {
-        const int WATCHED_WATERMARK = 10000; // Less than this and the chain of
+        const int WATCHED_WATERMARK = 3000; // Less than this and the chain of
                                              // videos will not be followed when
                                              // playing.
 

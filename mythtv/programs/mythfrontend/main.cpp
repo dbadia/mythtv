@@ -1159,8 +1159,16 @@ static int internal_play_media(const QString &mrl, const QString &plot,
         delete dvd;
     }
     else if (pginfo->IsVideo())
+    {
         bookmarkPresent = (pginfo->QueryBookmark() > 0);
-
+        if(pginfo->GetBasename().startsWith("Kids") ||
+            pginfo->GetBasename().startsWith("Emma") ||
+            pginfo->GetBasename().startsWith("James"))
+            {
+                LOG(VB_PLAYBACK, LOG_ERR, QString("BADIA bookmark ignored for home vid"));
+                bookmarkPresent = false;
+            }
+    }
     if (useBookmark && bookmarkPresent)
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
