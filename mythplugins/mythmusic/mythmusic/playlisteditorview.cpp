@@ -720,6 +720,10 @@ void PlaylistEditorView::createRootNode(void )
     node->setDrawArrow(true);
     node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
 
+    node = new MusicGenericTree(m_rootNode, tr("Albums by Artist"), "albumsbyart");
+    node->setDrawArrow(true);
+    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+
     node = new MusicGenericTree(m_rootNode, tr("Artists"), "artists");
     node->setDrawArrow(true);
     node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
@@ -822,7 +826,7 @@ void PlaylistEditorView::treeItemVisible(MythUIButtonListItem *item)
             if (mdata)
                 artFile = mdata->getAlbumArtFile();
         }
-        else if (mnode->getAction() == "album")
+        else if (mnode->getAction() == "album" || mnode->getAction() == "albumsbyart")
         {
             // hunt for a coverart image for the album
             MetadataPtrList *tracks = qVariantValue<MetadataPtrList*> (node->GetData());
@@ -861,6 +865,11 @@ void PlaylistEditorView::treeItemVisible(MythUIButtonListItem *item)
         else if (mnode->getAction() == "albums")
         {
             state = "albums";
+            artFile="blank.png";
+        }
+        else if (mnode->getAction() == "albumsbyart")
+        {
+            state = "albumsbyart";
             artFile="blank.png";
         }
         else if (mnode->getAction() == "artists")
@@ -1122,6 +1131,63 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
 
         node->sortByString(); // Case-insensitive sort
     }
+    else if (node->getAction() == "albumsbyart")
+    {
+        QMap<QString, MetadataPtrList*> map;
+        for (int x = 0; x < tracks->count(); x++)
+        {
+            MusicMetadata *mdata = tracks->at(x);
+            if (mdata)
+            {
+                if (map.contains(mdata->Artist()))
+                {
+                    MetadataPtrList *filteredTracks = map.value(mdata->Artist());
+                    filteredTracks->append(mdata);
+               }
+                else
+                {
+                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                   m_deleteList.append(filteredTracks);
+                    filteredTracks->append(mdata);
+                    map.insert(mdata->Artist(), filteredTracks);
+                }
+            }
+        }
+
+        // Map is sorted now by artist
+        QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
+        while (i != map.constEnd())
+        {
+            // i.key()=artist, i.value()=all tracks for that artist
+            QMap<QString, MetadataPtrList*> albumMap;
+
+            MetadataPtrList::iterator it = i.value()->begin();
+            for (; it != i.value()->end(); ++it) // for each track for an artist
+            {
+                if (albumMap.contains((*it)->Album()))
+                {
+                    MetadataPtrList *filteredTracks = albumMap.value((*it)->Album());
+                    filteredTracks->append((*it));
+                }
+                else
+                {
+                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+//             m_deleteList.append(filteredTracks); TODO: what is this about?
+                    filteredTracks->append((*it));
+                    albumMap.insert((*it)->Album(), filteredTracks);
+                }
+           }
+
+            QMap<QString, MetadataPtrList*>::const_iterator j = albumMap.constBegin();
+            while (j != albumMap.constEnd())
+            {
+                MusicGenericTree *newnode = new MusicGenericTree(node, j.key(), "artist album");
+                newnode->SetData(qVariantFromValue(j.value()));
+                ++j;
+            }
+            ++i;
+        }
+    }
     else if (node->getAction() == "genres")
     {
         QMap<QString, MetadataPtrList*> map;
@@ -1323,6 +1389,13 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         if (!fields.contains("artists"))
         {
             newnode = new MusicGenericTree(node, tr("Artists"), "artists");
+            newnode->setDrawArrow(true);
+            newnode->SetData(node->GetData());
+        }
+
+	if (!fields.contains("albumsbyart"))
+        {
+            newnode = new MusicGenericTree(node, tr("Albums by Artist"), "albumsbyart");
             newnode->setDrawArrow(true);
             newnode->SetData(node->GetData());
         }
