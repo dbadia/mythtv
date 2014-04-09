@@ -299,7 +299,10 @@ void MythSystemEventHandler::customEvent(QEvent *e)
 
         // Check for an EventCmd for this particular event
         cmd = gCoreContext->GetSetting(EventNameToSetting(tokens[1]));
-        if (!cmd.isEmpty())
+         LOG(VB_GENERAL, LOG_ERR, QString("dbcommand %1=%2")
+	                       .arg(EventNameToSetting(tokens[1])).arg(cmd));
+	
+	if (!cmd.isEmpty())
         {
             SubstituteMatches(tokens, cmd);
 
