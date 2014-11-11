@@ -1,0 +1,5 @@
+To merge myth upstream into my github repo (assumes .27fixes br)
+  git pull https://github.com/dbadia/mythtv.git fixes/0.27
+  merge any confilicts, then commit https://help.github.com/articles/resolving-a-merge-conflict-from-the-command-line/
+  git push origin 27f
+
