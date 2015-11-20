@@ -77,6 +77,8 @@ enum
     kDisplayRawTextSubtitle     = 0x080,
     kDisplayAllCaptions         = 0x0FF,
     kDisplayTeletextMenu        = 0x100,
+    kDisplayAllTextCaptions     = ~kDisplayDVDButton &
+                                   kDisplayAllCaptions,
 };
 
 enum PlayerFlags
@@ -133,6 +135,7 @@ class MTV_PUBLIC MythPlayer
 
   public:
     MythPlayer(PlayerFlags flags = kNoFlags);
+    MythPlayer(const MythPlayer& rhs);
     virtual ~MythPlayer();
 
     // Initialisation

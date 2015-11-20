@@ -20,6 +20,8 @@
 #include "mythuitextedit.h"
 #include "mythuispinbox.h"
 #include "mythdialogbox.h"
+#include "mythprogressdialog.h"
+#include "mythuimetadataresults.h"
 #include "recordinginfo.h"
 #include "recordingrule.h"
 #include "mythuihelper.h"
@@ -278,17 +280,17 @@ static QString extract_main_state(const ProgramInfo &pginfo, const TV *player)
     return state;
 }
 
-static QString extract_job_state(const ProgramInfo &pginfo)
+QString PlaybackBox::extract_job_state(const ProgramInfo &pginfo)
 {
     QString job = "default";
 
     if (pginfo.GetRecordingStatus() == rsRecording)
         job = "recording";
-    else if (JobQueue::IsJobQueuedOrRunning(
+    else if (m_jobQueue.IsJobQueuedOrRunning(
                  JOB_TRANSCODE, pginfo.GetChanID(),
                  pginfo.GetRecordingStartTime()))
         job = "transcoding";
-    else if (JobQueue::IsJobQueuedOrRunning(
+    else if (m_jobQueue.IsJobQueuedOrRunning(
                  JOB_COMMFLAG,  pginfo.GetChanID(),
                  pginfo.GetRecordingStartTime()))
         job = "commflagging";
@@ -296,15 +298,16 @@ static QString extract_job_state(const ProgramInfo &pginfo)
     return job;
 }
 
-static QString extract_commflag_state(const ProgramInfo &pginfo)
+QString PlaybackBox::extract_commflag_state(const ProgramInfo &pginfo)
 {
     QString job = "default";
 
     // commflagged can be yes, no or processing
-    if (JobQueue::IsJobRunning(JOB_COMMFLAG, pginfo))
+    if (m_jobQueue.IsJobRunning(JOB_COMMFLAG, pginfo.GetChanID(),
+                                pginfo.GetRecordingStartTime()))
         return "running";
-    if (JobQueue::IsJobQueued(JOB_COMMFLAG, pginfo.GetChanID(),
-                              pginfo.GetRecordingStartTime()))
+    if (m_jobQueue.IsJobQueued(JOB_COMMFLAG, pginfo.GetChanID(),
+                               pginfo.GetRecordingStartTime()))
         return "queued";
 
     return (pginfo.GetProgramFlags() & FL_COMMFLAG ? "yes" : "no");
@@ -3157,6 +3160,9 @@ void PlaybackBox::ShowActionPopup(const ProgramInfo &pginfo)
 
         m_popupMenu->AddItem(tr("Recording Options"), NULL, createRecordingMenu());
 
+        if (m_groupList->GetItemPos(m_groupList->GetItemCurrent()) == 0)
+            m_popupMenu->AddItem(tr("List Recorded Episodes"), SLOT(ShowRecordedEpisodes()));
+
         m_popupMenu->AddItem(tr("Delete"), SLOT(askDelete()));
 
         DisplayPopupMenu();
@@ -3209,6 +3215,9 @@ void PlaybackBox::ShowActionPopup(const ProgramInfo &pginfo)
     m_popupMenu->AddItem(tr("Storage Options"), NULL, createStorageMenu());
     m_popupMenu->AddItem(tr("Recording Options"), NULL, createRecordingMenu());
     m_popupMenu->AddItem(tr("Job Options"), NULL, createJobMenu());
+
+    if (m_groupList->GetItemPos(m_groupList->GetItemCurrent()) == 0)
+        m_popupMenu->AddItem(tr("List Recorded Episodes"), SLOT(ShowRecordedEpisodes()));
 
     if (!sameProgram)
     {
@@ -3507,6 +3516,22 @@ void PlaybackBox::Delete(DeleteFlags flags)
         MythEvent *e = new MythEvent("DELETE_FAILURES", m_delList);
         m_delList.clear();
         QCoreApplication::postEvent(this, e);
+    }
+}
+
+void PlaybackBox::ShowRecordedEpisodes()
+{
+    ProgramInfo *pginfo = CurrentItem();
+    if (pginfo) {
+        QString title = pginfo->GetTitle().toLower();
+        MythUIButtonListItem* group = m_groupList->GetItemByData(qVariantFromValue(title));
+        if (group)
+        {
+            m_groupList->SetItemCurrent(group);
+            // set focus back to previous item
+            MythUIButtonListItem *previousItem = m_recordingList->GetItemByData(qVariantFromValue(pginfo));
+            m_recordingList->SetItemCurrent(previousItem);
+        }
     }
 }
 
@@ -3877,6 +3902,24 @@ bool PlaybackBox::keyPressEvent(QKeyEvent *event)
 
             if (!nextGroup.isEmpty())
                 displayRecGroup(nextGroup);
+        }
+        else if (action == "NEXTVIEW")
+        {
+            int curpos = m_groupList->GetItemPos(m_groupList->GetItemCurrent());
+            if (++curpos >= m_groupList->GetCount())
+                curpos = 0;
+            m_groupList->SetItemCurrent(curpos);
+        }
+        else if (action == "PREVVIEW")
+        {
+            int curpos = m_groupList->GetItemPos(m_groupList->GetItemCurrent());
+            if (--curpos < 0)
+                curpos = m_groupList->GetCount() - 1;
+            m_groupList->SetItemCurrent(curpos);
+        }
+        else if (action == ACTION_LISTRECORDEDEPISODES)
+        {
+            ShowRecordedEpisodes();
         }
         else if (action == "CHANGERECGROUP")
             showGroupFilter();
@@ -5211,11 +5254,14 @@ void PasswordChange::SendResult()
 ////////////////////////////////////////////////////////
 
 RecMetadataEdit::RecMetadataEdit(MythScreenStack *lparent, ProgramInfo *pginfo)
-                : MythScreenType(lparent, "recmetadataedit"),
-                    m_progInfo(pginfo)
+  : MythScreenType(lparent, "recmetadataedit"),
+    m_titleEdit(NULL),      m_subtitleEdit(NULL),   m_descriptionEdit(NULL),
+    m_inetrefEdit(NULL),    m_seasonSpin(NULL),     m_episodeSpin(NULL),
+    m_busyPopup(NULL),      m_queryButton(NULL),
+    m_progInfo(pginfo)
 {
-    m_titleEdit = m_subtitleEdit = m_descriptionEdit = m_inetrefEdit = NULL;
-    m_seasonSpin = m_episodeSpin = NULL;
+    m_popupStack = GetMythMainWindow()->GetStack("popup stack");
+    m_metadataFactory = new MetadataFactory(this);
 }
 
 bool RecMetadataEdit::Create()
@@ -5230,6 +5276,7 @@ bool RecMetadataEdit::Create()
     m_seasonSpin = dynamic_cast<MythUISpinBox*>(GetChild("season"));
     m_episodeSpin = dynamic_cast<MythUISpinBox*>(GetChild("episode"));
     MythUIButton *okButton = dynamic_cast<MythUIButton*>(GetChild("ok"));
+    m_queryButton = dynamic_cast<MythUIButton*>(GetChild("query_button"));
 
     if (!m_titleEdit || !m_subtitleEdit || !m_inetrefEdit || !m_seasonSpin ||
         !m_episodeSpin || !okButton)
@@ -5256,6 +5303,10 @@ bool RecMetadataEdit::Create()
     m_episodeSpin->SetValue(m_progInfo->GetEpisode());
 
     connect(okButton, SIGNAL(Clicked()), SLOT(SaveChanges()));
+    if (m_queryButton)
+    {
+        connect(m_queryButton, SIGNAL(Clicked()), SLOT(PerformQuery()));
+    }
 
     BuildFocusList();
 
@@ -5281,6 +5332,146 @@ void RecMetadataEdit::SaveChanges()
     emit result(newRecTitle, newRecSubtitle, newRecDescription,
                 newRecInetref, newRecSeason, newRecEpisode);
     Close();
+}
+
+void RecMetadataEdit::PerformQuery()
+{
+    if (m_busyPopup)
+        return;
+
+    m_busyPopup = new MythUIBusyDialog(tr("Trying to manually find this "
+                                          "recording online..."),
+                                       m_popupStack,
+                                       "metaoptsdialog");
+
+    if (m_busyPopup->Create())
+        m_popupStack->AddScreen(m_busyPopup);
+
+    MetadataLookup *lookup = new MetadataLookup();
+    lookup->SetStep(kLookupSearch);
+    lookup->SetType(kMetadataRecording);
+    LookupType type = GuessLookupType(m_inetrefEdit->GetText());
+
+    if (type == kUnknownVideo)
+    {
+        if (m_seasonSpin->GetIntValue() == 0 &&
+            m_episodeSpin->GetIntValue() == 0 &&
+            m_subtitleEdit->GetText().isEmpty())
+        {
+            lookup->SetSubtype(kProbableMovie);
+        }
+        else
+        {
+            lookup->SetSubtype(kProbableTelevision);
+        }
+    }
+    else
+    {
+        // we could determine the type from the inetref
+        lookup->SetSubtype(type);
+    }
+    lookup->SetAllowGeneric(true);
+    lookup->SetHandleImages(false);
+    lookup->SetHost(gCoreContext->GetMasterHostName());
+    lookup->SetTitle(m_titleEdit->GetText());
+    lookup->SetSubtitle(m_subtitleEdit->GetText());
+    lookup->SetInetref(m_inetrefEdit->GetText());
+    lookup->SetCollectionref(m_inetrefEdit->GetText());
+    lookup->SetSeason(m_seasonSpin->GetIntValue());
+    lookup->SetEpisode(m_episodeSpin->GetIntValue());
+    lookup->SetAutomatic(false);
+
+    m_metadataFactory->Lookup(lookup);
+}
+
+void RecMetadataEdit::QueryComplete(MetadataLookup *lookup)
+{
+    if (!lookup)
+        return;
+
+    m_inetrefEdit->SetText(lookup->GetInetref());
+    m_seasonSpin->SetValue(lookup->GetSeason());
+    m_episodeSpin->SetValue(lookup->GetEpisode());
+    if (!lookup->GetSubtitle().isEmpty())
+    {
+        m_descriptionEdit->SetText(lookup->GetSubtitle());
+    }
+    if (!lookup->GetDescription().isEmpty())
+    {
+        m_descriptionEdit->SetText(lookup->GetDescription());
+    }
+}
+
+void RecMetadataEdit::OnSearchListSelection(RefCountHandler<MetadataLookup> lookup)
+{
+    QueryComplete(lookup);
+}
+
+void RecMetadataEdit::customEvent(QEvent *levent)
+{
+    if (levent->type() == MetadataFactoryMultiResult::kEventType)
+    {
+        if (m_busyPopup)
+        {
+            m_busyPopup->Close();
+            m_busyPopup = NULL;
+        }
+
+        MetadataFactoryMultiResult *mfmr = dynamic_cast<MetadataFactoryMultiResult*>(levent);
+
+        if (!mfmr)
+            return;
+
+        MetadataLookupList list = mfmr->results;
+
+        MetadataResultsDialog *resultsdialog =
+            new MetadataResultsDialog(m_popupStack, list);
+
+        connect(resultsdialog, SIGNAL(haveResult(RefCountHandler<MetadataLookup>)),
+                SLOT(OnSearchListSelection(RefCountHandler<MetadataLookup>)),
+                Qt::QueuedConnection);
+
+        if (resultsdialog->Create())
+            m_popupStack->AddScreen(resultsdialog);
+    }
+    else if (levent->type() == MetadataFactorySingleResult::kEventType)
+    {
+        if (m_busyPopup)
+        {
+            m_busyPopup->Close();
+            m_busyPopup = NULL;
+        }
+
+        MetadataFactorySingleResult *mfsr = dynamic_cast<MetadataFactorySingleResult*>(levent);
+
+        if (!mfsr && !mfsr->result)
+            return;
+
+        QueryComplete(mfsr->result);
+    }
+    else if (levent->type() == MetadataFactoryNoResult::kEventType)
+    {
+        if (m_busyPopup)
+        {
+            m_busyPopup->Close();
+            m_busyPopup = NULL;
+        }
+
+        MetadataFactoryNoResult *mfnr = dynamic_cast<MetadataFactoryNoResult*>(levent);
+
+        if (!mfnr)
+            return;
+
+        QString title = tr("No match found for this recording. You can "
+                           "try entering a TVDB/TMDB number, season, and "
+                           "episode manually.");
+
+        MythConfirmationDialog *okPopup =
+            new MythConfirmationDialog(m_popupStack, title, false);
+
+        if (okPopup->Create())
+            m_popupStack->AddScreen(okPopup);
+    }
 }
 
 //////////////////////////////////////////
@@ -5343,6 +5534,59 @@ void HelpPopup::addItem(const QString &state, const QString &text)
 {
     MythUIButtonListItem *item = new MythUIButtonListItem(m_iconList, text);
     item->DisplayState(state, "icons");
+}
+
+void PlaybackBox::PbbJobQueue::Update()
+{
+    QDateTime now = QDateTime::currentDateTime();
+    if (!m_lastUpdated.isValid() ||
+        m_lastUpdated.msecsTo(now) >= kInvalidateTimeMs)
+    {
+        QMap<int, JobQueueEntry> jobs;
+        JobQueue::GetJobsInQueue(jobs, JOB_LIST_ALL);
+        m_jobs.clear();
+        for (int i = 0; i < jobs.size(); ++i)
+        {
+            JobQueueEntry &entry = jobs[i];
+            m_jobs.insert(qMakePair(entry.chanid, entry.recstartts), entry);
+        }
+        m_lastUpdated = now;
+    }
+}
+
+bool PlaybackBox::PbbJobQueue::IsJobQueued(int jobType, uint chanid,
+                                           const QDateTime &recstartts)
+{
+    Update();
+    QList<JobQueueEntry> values = m_jobs.values(qMakePair(chanid, recstartts));
+    QList<JobQueueEntry>::const_iterator iter, end = values.end();
+    for (iter = values.begin(); iter != end; ++iter)
+    {
+        if (iter->type == jobType)
+            return JobQueue::IsJobStatusQueued(iter->status);
+    }
+    return false;
+}
+
+bool PlaybackBox::PbbJobQueue::IsJobRunning(int jobType, uint chanid,
+                                            const QDateTime &recstartts)
+{
+    Update();
+    QList<JobQueueEntry> values = m_jobs.values(qMakePair(chanid, recstartts));
+    QList<JobQueueEntry>::const_iterator iter, end = values.end();
+    for (iter = values.begin(); iter != end; ++iter)
+    {
+        if (iter->type == jobType)
+            return JobQueue::IsJobStatusRunning(iter->status);
+    }
+    return false;
+}
+
+bool PlaybackBox::PbbJobQueue::IsJobQueuedOrRunning(int jobType, uint chanid,
+                                                    const QDateTime &recstartts)
+{
+    return IsJobQueued(jobType, chanid, recstartts) ||
+        IsJobRunning(jobType, chanid, recstartts);
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

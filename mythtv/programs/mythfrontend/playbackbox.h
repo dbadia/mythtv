@@ -13,6 +13,7 @@ using namespace std;
 
 #include <QStringList>
 #include <QDateTime>
+#include <QMultiMap>
 #include <QObject>
 #include <QMutex>
 #include <QMap>
@@ -22,6 +23,7 @@ using namespace std;
 #include "tv_play.h"
 
 #include "mythscreentype.h"
+#include "metadatafactory.h"
 
 // mythfrontend
 #include "schedulecommon.h"
@@ -44,6 +46,7 @@ class MythUITextEdit;
 class MythUIButton;
 class MythDialogBox;
 class MythMenu;
+class MythUIBusyDialog;
 
 typedef QMap<QString,ProgramList>       ProgramMap;
 typedef QMap<QString,QString>           Str2StrMap;
@@ -190,6 +193,8 @@ class PlaybackBox : public ScheduleCommon
     void DeleteIgnoreAllRemaining(void)
         { Delete((DeleteFlags)((int)kIgnore|(int)kAllRemaining)); }
 
+    void ShowRecordedEpisodes();
+
     void toggleWatched();
     void toggleAutoExpire();
     void togglePreserveEpisode();
@@ -332,6 +337,9 @@ class PlaybackBox : public ScheduleCommon
 
     QString CreateProgramInfoString(const ProgramInfo &program) const;
 
+    QString extract_job_state(const ProgramInfo &pginfo);
+    QString extract_commflag_state(const ProgramInfo &pginfo);
+
 
     QRegExp m_prefixes;   ///< prefixes to be ignored when sorting
     QRegExp m_titleChaff; ///< stuff to remove for search rules
@@ -440,6 +448,29 @@ class PlaybackBox : public ScheduleCommon
     bool                m_usingGroupSelector;
     bool                m_groupSelected;
     bool                m_passwordEntered;
+
+    // This class caches the contents of the jobqueue table to avoid excessive
+    // DB queries each time the PBB selection changes (currently 4 queries per
+    // displayed item).  The cache remains valid for 15 seconds
+    // (kInvalidateTimeMs).
+    class PbbJobQueue
+    {
+    public:
+        PbbJobQueue() { Update(); }
+        bool IsJobQueued(int jobType, uint chanid,
+                         const QDateTime &recstartts);
+        bool IsJobRunning(int jobType, uint chanid,
+                          const QDateTime &recstartts);
+        bool IsJobQueuedOrRunning(int jobType, uint chanid,
+                                  const QDateTime &recstartts);
+    private:
+        static const qint64 kInvalidateTimeMs = 15000;
+        void Update();
+        QDateTime m_lastUpdated;
+        // Maps <chanid, recstartts> to a set of JobQueueEntry values.
+        typedef QMultiMap<QPair<uint, QDateTime>, JobQueueEntry> MapType;
+        MapType m_jobs;
+    } m_jobQueue;
 };
 
 class GroupSelector : public MythScreenType
@@ -528,16 +559,25 @@ class RecMetadataEdit : public MythScreenType
 
   protected slots:
     void SaveChanges(void);
+    void PerformQuery(void);
+    void OnSearchListSelection(RefCountHandler<MetadataLookup> lookup);
 
   private:
+    void customEvent(QEvent *event);
+    void QueryComplete(MetadataLookup *lookup);
+
     MythUITextEdit     *m_titleEdit;
     MythUITextEdit     *m_subtitleEdit;
     MythUITextEdit     *m_descriptionEdit;
     MythUITextEdit     *m_inetrefEdit;
     MythUISpinBox      *m_seasonSpin;
     MythUISpinBox      *m_episodeSpin;
+    MythUIBusyDialog   *m_busyPopup;
+    MythUIButton       *m_queryButton;
 
-    ProgramInfo *m_progInfo;
+    ProgramInfo        *m_progInfo;
+    MythScreenStack    *m_popupStack;
+    MetadataFactory    *m_metadataFactory;
 };
 
 class HelpPopup : public MythScreenType

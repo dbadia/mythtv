@@ -261,6 +261,12 @@ void MusicPlayer::stop(bool stopAll)
         m_output->Reset();
     }
 
+    if (m_oneshotMetadata)
+    {
+        delete m_oneshotMetadata;
+        m_oneshotMetadata = NULL;
+    }
+
     m_isPlaying = false;
 
     if (stopAll && getDecoder())
@@ -498,7 +504,7 @@ void MusicPlayer::nextAuto(void)
     }
 
     // if we don't already have a gui attached show the miniplayer if configured to do so
-    if (m_isAutoplay && m_canShowPlayer && m_autoShowPlayer)
+    if (m_isAutoplay && m_canShowPlayer && m_autoShowPlayer && m_isPlaying)
     {
         MythScreenStack *popupStack =
                             GetMythMainWindow()->GetStack("popup stack");
@@ -517,9 +523,6 @@ void MusicPlayer::StartPlayback(void)
     if (!gCoreContext->InWantingPlayback() && m_wasPlaying)
     {
         play();
-        seek(gCoreContext->GetNumSetting("MusicBookmarkPosition", 0));
-        gCoreContext->SaveSetting("MusicBookmark", "");
-        gCoreContext->SaveSetting("MusicBookmarkPosition", 0);
 
         m_wasPlaying = false;
     }
@@ -527,7 +530,7 @@ void MusicPlayer::StartPlayback(void)
 
 void MusicPlayer::StopPlayback(void)
 {
-    if (m_isPlaying)
+    if (m_output)
     {
         m_wasPlaying = m_isPlaying;
 
