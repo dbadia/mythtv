@@ -36,3 +36,4 @@ release
 bin
 *.ipch
 .directory
+.qmake.stash
