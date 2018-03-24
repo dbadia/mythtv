@@ -110,7 +110,7 @@ int ReferenceCounter::IncrRef(void)
             .arg(m_debugName).arg(reinterpret_cast<intptr_t>(this),0,16)
             .arg(val));
 #else
-        LOG(VB_REFCOUNT, LOG_INFO, QString("(0x%2)::IncrRef() -> %3")
+        LOG(VB_REFCOUNT, LOG_DEBUG, QString("(0x%2)::IncrRef() -> %3")
             .arg(reinterpret_cast<intptr_t>(this),0,16).arg(val));
 #endif
     }
@@ -141,7 +141,7 @@ int ReferenceCounter::DecrRef(void)
             .arg(m_debugName).arg(reinterpret_cast<intptr_t>(this),0,16)
             .arg(val));
 #else
-        LOG(VB_REFCOUNT, LOG_INFO, QString("(0x%2)::DecrRef() -> %3")
+        LOG(VB_REFCOUNT, LOG_DEBUG, QString("(0x%2)::DecrRef() -> %3")
             .arg(reinterpret_cast<intptr_t>(this),0,16).arg(val));
 #endif
     }
